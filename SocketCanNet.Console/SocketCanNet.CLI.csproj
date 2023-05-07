@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Don't use net7.0 since it requires glibc 2.27. Some integrated hardware is still using glibc 2.25. -->
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+
+    <!--Invariant globalization removes the need for the ICU library on Linux, and also reduces the size of the executable.-->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SocketCanNet\SocketCanNet.csproj" />
+  </ItemGroup>
+
+</Project>
