@@ -15,35 +15,84 @@ namespace SocketCanNet
 
     public static class SocketExtensions
     {
+        /// <summary>
+        /// Send a CAN frame.
+        /// </summary>
+        /// <param name="canFrame"></param>
+        public static void SendCanFrame(this Socket socket, ValueCanFrame canFrame)
+        {
+            socket.Send(canFrame.RawFrame, SocketFlags.None);
+        }
+
+        /// <summary>
+        /// Send a CAN frame.
+        /// </summary>
+        /// <param name="canFrame"></param>
         public static void SendCanFrame(this Socket socket, CanFrame canFrame)
         {
-            socket.Send(canFrame.RawBufferSpan, SocketFlags.None);
+            socket.Send(canFrame.ValueCanFrame.RawFrame, SocketFlags.None);
         }
 
-        public static async Task SendCanFrameAsync(this Socket socket, CanFrame canFrame, CancellationToken cancellationToken = default)
+
+        /// <summary>
+        /// Send a CAN frame.
+        /// </summary>
+        /// <param name="canFrame"></param>
+        public static async ValueTask SendCanFrameAsync(this Socket socket, CanFrame canFrame, CancellationToken cancellationToken = default)
         {
-            await socket.SendAsync(canFrame.RawBufferMemory, SocketFlags.None, cancellationToken);
+            await socket.SendAsync(canFrame.RawFrameMemory, SocketFlags.None, cancellationToken);
         }
 
+        /// <summary>
+        /// Receive a CAN frame.
+        /// This method internally allocates an array of size <see cref="CanFrame.MaximumFrameSize"/> to use as the backing buffer.
+        /// </summary>
+        /// <returns>The received CAN frame</returns>
         public static CanFrame ReceiveCanFrame(this Socket socket)
         {
-            Span<byte> receiveBuffer = stackalloc byte[CANFD_MTU];
+            byte[] receiveBuffer = new byte[CanFrame.MaximumFrameSize];
             int bytesRead = socket.Receive(receiveBuffer, SocketFlags.None);
-            return CanFrame.Create(receiveBuffer[..bytesRead]);
+            return new CanFrame(receiveBuffer[..bytesRead]);
         }
 
-        public static async Task<CanFrame> ReceiveCanFrameAsync(this Socket socket, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// Receive a CAN frame.
+        /// This method returns a stack-only ref struct and does not allocate. It is intended for high performance scenarios.
+        /// </summary>
+        /// <param name="receiveBuffer">Buffer that will receive CAN frame data.
+        /// If CAN FD frames are disabled, the buffer must be at least <see cref="ValueCanFrame.StandardFrameSize"/> in length.
+        /// If CAN FD frames are enabled, the buffer must be at least <see cref="ValueCanFrame.CanFdFrameSize"/> in length.
+        /// </param>
+        /// <returns>The received CAN frame as a ValueCanFrame ref struct</returns>
+        public static ValueCanFrame ReceiveCanFrame(this Socket socket, Span<byte> receiveBuffer)
         {
-            var receiveBuffer = ArrayPool<byte>.Shared.Rent(CANFD_MTU);
-            try
-            {
-                int bytesRead = await socket.ReceiveAsync(receiveBuffer, SocketFlags.None, cancellationToken);
-                return CanFrame.Create(receiveBuffer.AsSpan()[..bytesRead]);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(receiveBuffer);
-            }
+            int bytesRead = socket.Receive(receiveBuffer, SocketFlags.None);
+            return new ValueCanFrame(receiveBuffer[..bytesRead]);
+        }
+
+        /// <summary>
+        /// Receive a CAN frame.
+        /// This method internally allocates an array of size <see cref="CanFrame.MaximumFrameSize"/> to use as the backing buffer.
+        /// </summary>
+        /// <returns>The received CAN frame</returns>
+        public static async ValueTask<CanFrame> ReceiveCanFrameAsync(this Socket socket, CancellationToken cancellationToken = default)
+        {
+            byte[] receiveBuffer = new byte[CanFrame.MaximumFrameSize];
+            return await socket.ReceiveCanFrameAsync(receiveBuffer, cancellationToken);
+        }
+
+        /// <summary>
+        /// Receive a CAN frame.
+        /// </summary>
+        /// <param name="receiveBuffer">Memory that will receive CAN frame data.
+        /// If CAN FD frames are disabled, the buffer must be at least <see cref="CanFrame.StandardFrameSize"/> in length.
+        /// If CAN FD frames are enabled, the buffer must be at least <see cref="CanFrame.CanFdFrameSize"/> in length.
+        /// </param>
+        /// <returns>The received CAN frame</returns>
+        public static async ValueTask<CanFrame> ReceiveCanFrameAsync(this Socket socket, Memory<byte> receiveBuffer, CancellationToken cancellationToken = default)
+        {
+            int bytesRead = await socket.ReceiveAsync(receiveBuffer, SocketFlags.None, cancellationToken);
+            return new CanFrame(receiveBuffer[..bytesRead]);
         }
 
         /// <summary>

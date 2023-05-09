@@ -52,9 +52,11 @@ namespace SocketCanNet.CLI
 
             Console.WriteLine($"Ready to receive CAN frames");
 
+            // Demonstrate allocation-free reading of CAN frames
+            Span<byte> bytes = stackalloc byte[ValueCanFrame.MaximumFrameSize];
             while (true)
             {
-                CanFrame canFrame = socket.ReceiveCanFrame();
+                ValueCanFrame canFrame = socket.ReceiveCanFrame(bytes);
                 Console.WriteLine($"[{canFrame.Id}]: ({canFrame.PayloadLength}) {Convert.ToHexString(canFrame.PayloadSpan)}");
             }
         }

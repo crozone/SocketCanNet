@@ -5,7 +5,7 @@ VisualStudioVersion = 17.5.33530.505
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketCanNet", "SocketCanNet\SocketCanNet.csproj", "{71A45465-39A9-463D-8FCC-7836151C59F0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketCanNet.CLI", "SocketCanNet.Console\SocketCanNet.CLI.csproj", "{0156EDBE-E440-45BA-9E0E-4C09BFD6837C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketCanNet.CLI", "SocketCanNet.CLI\SocketCanNet.CLI.csproj", "{0156EDBE-E440-45BA-9E0E-4C09BFD6837C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

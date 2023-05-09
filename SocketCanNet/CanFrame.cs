@@ -1,153 +1,97 @@
 ﻿using System;
 
-using static SocketCanNet.Constants;
-
 namespace SocketCanNet
 {
-    /*
-        struct can_frame {
-            canid_t can_id;  // 29 bit CAN_ID + EFF/RTR/ERR flags
-            __u8 can_dlc; // frame payload length in byte (0 .. 8)
-            __u8 __pad;   // padding
-            __u8 __res0;  // reserved / padding
-            __u8 __res1;  // reserved / padding
-            __u8 data[8] __attribute__((aligned(8))); // Start offset = 8
-        };
-    */
-
-    /*
-        struct canfd_frame {
-            canid_t can_id;  // 29 bit CAN_ID + EFF/RTR/ERR flags
-            __u8 len;     // frame payload length in byte (0 .. 64)
-            __u8 flags;   // additional flags for CAN FD
-            __u8 __res0;  // reserved / padding
-            __u8 __res1;  // reserved / padding
-            __u8 data[64] __attribute__((aligned(8))); // Start offset = 8
-        };
-    */
-
+    /// <summary>
+    /// Represents a CAN frame backed by a memory buffer.
+    /// </summary>
     public class CanFrame
     {
-        /*
-         * canid_t: Controller Area Network Identifier structure
-         *
-         * bit 0-28 | 0x1FFFFFFF: CAN identifier (11/29 bit)
-         * bit 29	| 0x20000000: error message frame flag (0 = data frame, 1 = error message) (ERR)
-         * bit 30	| 0x40000000: remote transmission request flag (1 = rtr frame) (RTR)
-         * bit 31	| 0x80000000: frame format flag (0 = standard 11 bit, 1 = extended 29 bit) (SFF or EFF)
-         */
+        public const int StandardFrameSize = Constants.CAN_MTU;
+        public const int CanFdFrameSize = Constants.CANFD_MTU;
+        public const int MaximumFrameSize = CanFdFrameSize;
 
-        /// <summary>
-        /// Mask for the CAN ID in the can_id field
-        /// </summary>
-        private const uint CanIdMask = 0x1FFF_FFFF;
+        public Memory<byte> RawFrameMemory;
 
-        /// <summary>
-        /// Mask for the error message frame flag in the can_id field
-        /// </summary>
-        private const uint CanIdErrMask = 0x2000_0000;
+        public CanFrame(bool canFd) : this(new byte[canFd ? CanFdFrameSize : StandardFrameSize].AsMemory()) { }
 
-        /// <summary>
-        /// Mask for the remote transmission request flag in the can_id field
-        /// </summary>
-        private const uint CanIdRtrMask = 0x4000_0000;
+        public CanFrame(Memory<byte> rawFrame)
+        {
+            if (rawFrame.Length != StandardFrameSize && rawFrame.Length != CanFdFrameSize)
+            {
+                throw new ArgumentException($"CAN frame length must be {StandardFrameSize} for CAN or {CanFdFrameSize} for CAN FD", nameof(rawFrame));
+            }
 
-        /// <summary>
-        /// Mask for the frame format flag in the can_id field
-        /// </summary>
-        private const uint CanIdEffMask = 0x8000_0000;
+            RawFrameMemory = rawFrame;
+        }
 
-        private const int FrameStart = 8;
+        public Memory<byte> CanIdMemory => RawFrameMemory[..4];
+        public Memory<byte> DataMemory => RawFrameMemory[ValueCanFrame.FrameStart..];
+        public Memory<byte> PayloadMemory => DataMemory[..Math.Min(PayloadLength, DataMemory.Length)];
 
-        public bool IsCanFd { get; private set; }
+        public ValueCanFrame ValueCanFrame => new ValueCanFrame(RawFrameMemory.Span);
 
-        private byte[] buffer;
-
-        public Memory<byte> RawBufferMemory => buffer.AsMemory();
-        public Span<byte> RawBufferSpan => buffer.AsSpan();
-        public Span<byte> CanIdSpan => RawBufferSpan[..4];
-        public Span<byte> DataSpan => RawBufferSpan[FrameStart..];
-        public Span<byte> PayloadSpan => DataSpan[..Math.Min(PayloadLength, DataSpan.Length)];
+        public bool IsCanFd => ValueCanFrame.IsCanFd;
 
         /// <summary>
         /// The value of the CAN ID field, with the flags included in the high order bits
         /// </summary>
         public uint RawId {
-            get => BitConverter.ToUInt32(CanIdSpan);
-            set => BitConverter.TryWriteBytes(CanIdSpan, value);
+            get => ValueCanFrame.RawId;
+            set {
+                ValueCanFrame valueCanFrame = this.ValueCanFrame;
+                valueCanFrame.RawId = value;
+            }
         }
 
         /// <summary>
         /// The CAN message ID
         /// </summary>
         public int Id {
-            get => (int)(RawId & CanIdMask); // 3 highest order bits are EFF/RTR/ERR flags
-            set => RawId = (RawId & ~CanIdMask) | ((uint)value & CanIdMask);
+            get => ValueCanFrame.Id;
+            set {
+                ValueCanFrame valueCanFrame = this.ValueCanFrame;
+                valueCanFrame.Id = value;
+            }
         }
 
         public int PayloadLength {
-            get => RawBufferSpan[4];
+            get => ValueCanFrame.PayloadLength;
             set {
-                if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), "CAN frame data length must be greater than zero");
-                if (!IsCanFd && value > 8) throw new ArgumentOutOfRangeException(nameof(value), "CAN frame must be between 0-8 bytes");
-                if (IsCanFd && value > 64) throw new ArgumentOutOfRangeException(nameof(value), "CAN FD frame must be between 0-64 bytes");
-
-                RawBufferSpan[4] = (byte)value;
-                RawBufferSpan[(8 + value)..].Fill(0);
+                ValueCanFrame valueCanFrame = this.ValueCanFrame;
+                valueCanFrame.PayloadLength = value;
             }
         }
 
         public bool IsErrorMessage {
-            get => (RawId & CanIdErrMask) != 0;
-            set => RawId = (RawId & ~CanIdErrMask) | (value ? CanIdErrMask : 0);
+            get => ValueCanFrame.IsErrorMessage;
+            set {
+                ValueCanFrame valueCanFrame = this.ValueCanFrame;
+                valueCanFrame.IsErrorMessage = value;
+            }
         }
 
         public bool IsRemoteTransmissionRequest {
-            get => (RawId & CanIdRtrMask) != 0;
+            get => ValueCanFrame.IsRemoteTransmissionRequest;
             set {
-                RawId = (RawId & ~CanIdRtrMask) | (value ? CanIdRtrMask : 0);
-                if (value)
-                {
-                    PayloadLength = 0;
-                }
+                ValueCanFrame valueCanFrame = this.ValueCanFrame;
+                valueCanFrame.IsRemoteTransmissionRequest = value;
             }
         }
 
         public bool IsExtendedFrame {
-            get => ((RawId & CanIdEffMask) != 0) || (Id > 0x7FF);
-            set => RawId = (RawId & ~CanIdEffMask) | (value ? CanIdEffMask : 0);
+            get => ValueCanFrame.IsExtendedFrame;
+            set {
+                ValueCanFrame valueCanFrame = this.ValueCanFrame;
+                valueCanFrame.IsExtendedFrame = value;
+            }
         }
 
         public byte CanFdFlags {
-            get => RawBufferSpan[5];
-            set => RawBufferSpan[5] = value;
-        }
-
-        public CanFrame(bool canFd) : this(new byte[canFd ? CANFD_MTU : CAN_MTU], canFd) { }
-
-        internal CanFrame(byte[] frame, bool canFd)
-        {
-            buffer = frame;
-            IsCanFd = canFd;
-        }
-
-        public static CanFrame Create(ReadOnlySpan<byte> buffer)
-        {
-            if (buffer.Length == CAN_MTU)
-            {
-                // CAN frame
-                byte[] array = buffer[..CAN_MTU].ToArray();
-                return new CanFrame(array, false);
-            }
-            else if (buffer.Length == CANFD_MTU)
-            {
-                // CAN FD frame
-                byte[] array = buffer[..CANFD_MTU].ToArray();
-                return new CanFrame(array, true);
-            }
-            else
-            {
-                throw new ArgumentException($"CAN frame length must be {CAN_MTU} for CAN or {CANFD_MTU} for CAN FD", nameof(buffer));
+            get => ValueCanFrame.CanFdFlags;
+            set {
+                ValueCanFrame valueCanFrame = this.ValueCanFrame;
+                valueCanFrame.CanFdFlags = value;
             }
         }
     }
