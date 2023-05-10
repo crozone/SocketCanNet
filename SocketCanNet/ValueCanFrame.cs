@@ -84,15 +84,17 @@ namespace SocketCanNet
         public bool IsCanFd => RawFrame.Length == CanFdFrameSize;
 
         /// <summary>
-        /// The value of the CAN ID field, with the flags included in the high order bits
+        /// The value of the CAN ID field interpreted as an unsigned 32-bit little-endian integer,
+        /// with the EFF/RTR/ERR flags included in the top 3 high order bits.
         /// </summary>
         public uint RawId {
-            get => BitConverter.ToUInt32(CanIdSpan);
-            set => BitConverter.TryWriteBytes(CanIdSpan, value);
+            get => System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(CanIdSpan);
+            set => System.Buffers.Binary.BinaryPrimitives.TryWriteUInt32LittleEndian(CanIdSpan, value);
         }
 
         /// <summary>
-        /// The CAN message ID
+        /// The value of the CAN ID field interpreted as an unsigned 32-bit little-endian integer,
+        /// with the EFF/RTR/ERR flags removed.
         /// </summary>
         public int Id {
             get => (int)(RawId & CanIdMask); // 3 highest order bits are EFF/RTR/ERR flags
